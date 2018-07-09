@@ -19,11 +19,9 @@
 		if(prefs.muted & MUTE_OOC)
 			to_chat(src, "<span class='danger'>You cannot use OOC (muted).</span>")
 			return
-	if(jobban_isbanned(src.mob, "OOC"))
-		to_chat(src, "<span class='danger'>You have been banned from OOC.</span>")
-		return
-	if(QDELETED(src))
-		return
+		if(jobban_isbanned(src.mob, "OOC"))
+			to_chat(src, "<span class='danger'>You have been banned from OOC.</span>")
+			return
 
 	msg = copytext(sanitize(msg), 1, MAX_MESSAGE_LEN)
 	var/raw_msg = msg
@@ -56,25 +54,20 @@
 
 	var/keyname = key
 	if(prefs.unlock_content)
-		if(lowertext(key) in diamonddonators)
-			keyname = "<font color='[CONFIG_GET(string/diamonddonatecolor)]'><span class='ooc'>[icon2html('icons/donator_image/diamond.dmi', world)][key]</font>"
-		else if(lowertext(key) in donators)
-			keyname = "<font color='[CONFIG_GET(string/donatecolor)]'><span class='ooc'>[icon2html('icons/donator_image/donator.dmi', world, "blag")][key]</font>"
-		else if(prefs.toggles & MEMBER_PUBLIC)
+		if(prefs.toggles & MEMBER_PUBLIC)
 			keyname = "<font color='[prefs.ooccolor ? prefs.ooccolor : GLOB.normal_ooc_colour]'>[icon2html('icons/member_content.dmi', world, "blag")][keyname]</font>"
-	//The linkify span classes and linkify=TRUE below make ooc text get clickable chat href links if you pass in something resembling a url
 	for(var/client/C in GLOB.clients)
 		if(C.prefs.chat_toggles & CHAT_OOC)
 			if(holder)
 				if(!holder.fakekey || C.holder)
 					if(check_rights_for(src, R_ADMIN))
-						to_chat(C, "<span class='adminooc'>[CONFIG_GET(flag/allow_admin_ooccolor) && prefs.ooccolor ? "<font color=[prefs.ooccolor]>" :"" ]<span class='prefix'>OOC:</span> <EM>[keyname][holder.fakekey ? "/([holder.fakekey])" : ""]:</EM> <span class='message linkify'>[msg]</span></span></font>")
+						to_chat(C, "<span class='adminooc'>[CONFIG_GET(flag/allow_admin_ooccolor) && prefs.ooccolor ? "<font color=[prefs.ooccolor]>" :"" ]<span class='prefix'>OOC:</span> <EM>[keyname][holder.fakekey ? "/([holder.fakekey])" : ""]:</EM> <span class='message'>[msg]</span></span></font>")
 					else
-						to_chat(C, "<span class='adminobserverooc'><span class='prefix'>OOC:</span> <EM>[keyname][holder.fakekey ? "/([holder.fakekey])" : ""]:</EM> <span class='message linkify'>[msg]</span></span>")
+						to_chat(C, "<span class='adminobserverooc'><span class='prefix'>OOC:</span> <EM>[keyname][holder.fakekey ? "/([holder.fakekey])" : ""]:</EM> <span class='message'>[msg]</span></span>")
 				else
-					to_chat(C, "<font color='[GLOB.normal_ooc_colour]'><span class='ooc'><span class='prefix'>OOC:</span> <EM>[holder.fakekey ? holder.fakekey : key]:</EM> <span class='message linkify'>[msg]</span></span></font>")
+					to_chat(C, "<font color='[GLOB.normal_ooc_colour]'><span class='ooc'><span class='prefix'>OOC:</span> <EM>[holder.fakekey ? holder.fakekey : key]:</EM> <span class='message'>[msg]</span></span></font>")
 			else if(!(key in C.prefs.ignoring))
-				to_chat(C, "<font color='[GLOB.normal_ooc_colour]'><span class='ooc'><span class='prefix'>OOC:</span> <EM>[keyname]:</EM> <span class='message linkify'>[msg]</span></span></font>")
+				to_chat(C, "<font color='[GLOB.normal_ooc_colour]'><span class='ooc'><span class='prefix'>OOC:</span> <EM>[keyname]:</EM> <span class='message'>[msg]</span></span></font>")
 
 /proc/toggle_ooc(toggle = null)
 	if(toggle != null) //if we're specifically en/disabling ooc
@@ -237,7 +230,7 @@ GLOBAL_VAR_INIT(normal_ooc_colour, OOC_COLOR)
 
 	var/motd = global.config.motd
 	if(motd)
-		to_chat(src, "<div class=\"motd\">[motd]</div>", handle_whitespace=FALSE)
+		to_chat(src, "<div class=\"motd\">[motd]</div>")
 	else
 		to_chat(src, "<span class='notice'>The Message of the Day has not been set.</span>")
 
@@ -299,55 +292,107 @@ GLOBAL_VAR_INIT(normal_ooc_colour, OOC_COLOR)
 		return
 	ignore_key(selection)
 
-/client/proc/show_previous_roundend_report()
-	set name = "Your Last Round"
+
+
+	/client/verb/looc(msg as text)
+	set name = "LOOC"
+	set desc = "Local OOC, seen only by those in view."
 	set category = "OOC"
-	set desc = "View the last round end report you've seen"
 
-	SSticker.show_roundend_report(src, TRUE)
-
-/client/verb/fit_viewport()
-	set name = "Fit Viewport"
-	set category = "OOC"
-	set desc = "Fit the width of the map window to match the viewport"
-
-	// Fetch aspect ratio
-	var/view_size = getviewsize(view)
-	var/aspect_ratio = view_size[1] / view_size[2]
-
-	// Calculate desired pixel width using window size and aspect ratio
-	var/sizes = params2list(winget(src, "mainwindow.split;mapwindow", "size"))
-	var/map_size = splittext(sizes["mapwindow.size"], "x")
-	var/height = text2num(map_size[2])
-	var/desired_width = round(height * aspect_ratio)
-	if (text2num(map_size[1]) == desired_width)
-		// Nothing to do
+	if(say_disabled)	//This is here to try to identify lag problems
+		usr << "<span class='danger'>Speech is currently admin-disabled.</span>"
 		return
 
-	var/split_size = splittext(sizes["mainwindow.split.size"], "x")
-	var/split_width = text2num(split_size[1])
+	if(!mob)
+		return
 
-	// Calculate and apply a best estimate
-	// +4 pixels are for the width of the splitter's handle
-	var/pct = 100 * (desired_width + 4) / split_width
-	winset(src, "mainwindow.split", "splitter=[pct]")
+	if(IsGuestKey(key))
+		src << "Guests may not use OOC."
+		return
 
-	// Apply an ever-lowering offset until we finish or fail
-	var/delta
-	for(var/safety in 1 to 10)
-		var/after_size = winget(src, "mapwindow", "size")
-		map_size = splittext(after_size, "x")
-		var/got_width = text2num(map_size[1])
+	msg = sanitize(msg)
+	if(!msg)
+		return
 
-		if (got_width == desired_width)
-			// success
+	if(!is_preference_enabled(/datum/client_preference/show_looc))
+		src << "<span class='danger'>You have LOOC muted.</span>"
+		return
+
+	if(!holder)
+		if(!config.looc_allowed)
+			src << "<span class='danger'>LOOC is globally muted.</span>"
 			return
-		else if (isnull(delta))
-			// calculate a probable delta value based on the difference
-			delta = 100 * (desired_width - got_width) / split_width
-		else if ((delta > 0 && got_width > desired_width) || (delta < 0 && got_width < desired_width))
-			// if we overshot, halve the delta and reverse direction
-			delta = -delta/2
+		if(!config.dooc_allowed && (mob.stat == DEAD))
+			usr << "<span class='danger'>OOC for dead mobs has been turned off.</span>"
+			return
+		if(prefs.muted & MUTE_OOC)
+			src << "<span class='danger'>You cannot use OOC (muted).</span>"
+			return
+		if(findtext(msg, "byond://"))
+			src << "<B>Advertising other servers is not allowed.</B>"
+			log_admin("[key_name(src)] has attempted to advertise in OOC: [msg]")
+			message_admins("[key_name_admin(src)] has attempted to advertise in OOC: [msg]")
+			return
 
-		pct += delta
-		winset(src, "mainwindow.split", "splitter=[pct]")
+	log_looc(msg,src)
+
+	if(msg)
+		handle_spam_prevention(MUTE_OOC)
+
+	var/mob/source = mob.get_looc_source()
+	var/turf/T = get_turf(source)
+	if(!T) return
+	var/list/in_range = get_mobs_and_objs_in_view_fast(T,world.view,0)
+	var/list/m_viewers = in_range["mobs"]
+
+	var/list/receivers = list() // Clients, not mobs.
+	var/list/r_receivers = list()
+
+	var/display_name = key
+	if(holder && holder.fakekey)
+		display_name = holder.fakekey
+	if(mob.stat != DEAD)
+		display_name = mob.name
+	//VOREStation Add - Resleeving shenanigan prevention
+	if(ishuman(mob))
+		var/mob/living/carbon/human/H = mob
+		if(H.original_player && H.original_player != H.ckey) //In a body not their own
+			display_name = "[H.mind.name] (as [H.name])"
+	//VOREStation Add End
+
+	// Everyone in normal viewing range of the LOOC
+	for(var/mob/viewer in m_viewers)
+		if(viewer.client && viewer.client.is_preference_enabled(/datum/client_preference/show_looc))
+			receivers |= viewer.client
+		else if(istype(viewer,/mob/observer/eye)) // For AI eyes and the like
+			var/mob/observer/eye/E = viewer
+			if(E.owner && E.owner.client)
+				receivers |= E.owner.client
+
+	// Admins with RLOOC displayed who weren't already in
+	for(var/client/admin in admins)
+		if(!(admin in receivers) && admin.is_preference_enabled(/datum/client_preference/holder/show_rlooc))
+			r_receivers |= admin
+
+	// Send a message
+	for(var/client/target in receivers)
+		var/admin_stuff = ""
+
+		if(target in admins)
+			admin_stuff += "/([key])"
+
+		target << "<span class='ooc'><span class='looc'>" + create_text_tag("looc", "LOOC:", target) + " <EM>[display_name][admin_stuff]:</EM> <span class='message'>[msg]</span></span></span>"
+
+	for(var/client/target in r_receivers)
+		var/admin_stuff = "/([key])([admin_jump_link(mob, target.holder)])"
+
+		target << "<span class='ooc'><span class='looc'>" + create_text_tag("looc", "LOOC:", target) + " <span class='prefix'>(R)</span><EM>[display_name][admin_stuff]:</EM> <span class='message'>[msg]</span></span></span>"
+
+/mob/proc/get_looc_source()
+	return src
+
+/mob/living/silicon/ai/get_looc_source()
+	if(eyeobj)
+		return eyeobj
+	return src
+
